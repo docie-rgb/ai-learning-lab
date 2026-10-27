@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>편의점 야간 알바</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 점수판 -->
+    <header class="hud">
+      <div class="hud-item">
+        <span class="lbl">DAY</span>
+        <span id="hudStage" class="val">1</span>
+      </div>
+      <div class="hud-item" id="hudTimeBox">
+        <span class="lbl">TIME</span>
+        <span id="hudTime" class="val">3:00</span>
+      </div>
+      <div class="hud-item wide">
+        <span class="lbl">매출 <small>/ 목표 <span id="hudTarget">15,000</span></small></span>
+        <span id="hudSales" class="val">0원</span>
+        <div class="bar"><div id="salesBar" class="bar-fill sales"></div></div>
+      </div>
+      <div class="hud-item wide">
+        <span class="lbl">평점</span>
+        <span id="hudRating" class="val">70</span>
+        <div class="bar"><div id="ratingBar" class="bar-fill rating"></div></div>
+      </div>
+      <button id="btnSound" class="icon-btn" type="button" aria-label="사운드 끄기/켜기">🔊</button>
+    </header>
+
+    <!-- 게임판 -->
+    <main id="scene" class="scene">
+      <div class="wall"></div>
+      <div class="floor"></div>
+      <div class="door"><span>PUSH</span></div>
+      <div class="window">
+        <div class="moon"></div>
+        <span class="star s1"></span><span class="star s2"></span><span class="star s3"></span>
+      </div>
+      <div class="sign">🐱 냥냥마트 <b>24</b></div>
+      <div class="clock" id="clock">PM 10:00</div>
+      <div class="shelves" id="shelves"></div>
+
+      <div id="customer" class="customer hidden">
+        <div id="bubble" class="bubble"></div>
+        <div id="customerSprite" class="sprite person"></div>
+      </div>
+
+      <div id="clerk" class="sprite person clerk"></div>
+      <div class="counter">
+        <div id="counterItems" class="counter-items"></div>
+        <div class="register"><div id="registerScreen" class="register-screen">WELCOME</div></div>
+      </div>
+
+      <div id="floaters" class="floaters"></div>
+      <div id="banner" class="banner hidden"></div>
+    </main>
+
+    <div class="status-line">
+      <span id="streak" class="streak">연속 정답 ☆☆☆</span>
+      <span id="hint" class="hint">게임 시작을 눌러주세요</span>
+    </div>
+
+    <!-- 버튼 -->
+    <nav class="controls">
+      <button id="btnCheckout" class="btn btn-main" type="button">🧾 계산하기</button>
+      <button id="btnStock" class="btn btn-stock" type="button">📦 재고 관리</button>
+      <button id="btnServe" class="btn btn-villain" type="button">💢 손님 응대</button>
+      <button id="btnRetry" class="btn btn-sub" type="button">↺ 다시하기</button>
+    </nav>
+  </div>
+
+  <!-- 팝업 -->
+  <div id="overlay" class="overlay">
+    <!-- 시작 화면 -->
+    <section id="modalStart" class="modal start-modal">
+      <div class="title-art" id="titleArt"></div>
+      <h1 class="game-title">편의점<br>야간 알바</h1>
+      <p class="tagline">냥냥마트 24시 신입 알바생이 되어<br>3일 밤을 무사히 버텨라!</p>
+      <ul class="rules">
+        <li>🧾 손님이 오면 <b>계산하기</b>로 총금액 입력</li>
+        <li>❌ 틀리면 평점 <b class="neg">-10</b> · ⭐ 3연속 정답 <b class="pos">+5</b></li>
+        <li>📦 재고가 바닥나면 <b>재고 관리</b>에서 발주 (+5개)</li>
+        <li>💢 빌런 손님은 <b>손님 응대</b>로 대처!</li>
+        <li>⏱ 180초 안에 목표 매출 달성 → 다음 날</li>
+        <li>💀 평점 0점이 되면 즉시 해고</li>
+      </ul>
+      <button id="btnStart" class="btn btn-main big" type="button">▶ 게임 시작</button>
+    </section>
+
+    <!-- 상품 계산 -->
+    <section id="modalCalc" class="modal hidden">
+      <div class="modal-head">
+        <h2>🧾 상품 계산</h2>
+        <span class="modal-timer" data-timer>3:00</span>
+      </div>
+      <ul id="calcList" class="item-list"></ul>
+      <p id="calcNote" class="note"></p>
+      <label class="calc-input-wrap" id="calcInputWrap">
+        <span>총 금액</span>
+        <input id="calcInput" type="text" inputmode="numeric" autocomplete="off" placeholder="금액 입력">
+        <span>원</span>
+      </label>
+      <p id="calcMsg" class="msg" role="alert"></p>
+      <div id="keypad" class="keypad">
+        <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+        <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
+        <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+        <button type="button" data-key="C" class="k-clear">C</button><button type="button" data-key="0">0</button><button type="button" data-key="00">00</button>
+      </div>
+      <div class="modal-actions">
+        <button id="btnCalcClose" class="btn btn-sub" type="button">닫기</button>
+        <button id="btnCalcSubmit" class="btn btn-main" type="button">계산 완료</button>
+      </div>
+    </section>
+
+    <!-- 재고 발주 -->
+    <section id="modalStock" class="modal hidden">
+      <div class="modal-head">
+        <h2>📦 재고 관리</h2>
+        <span class="modal-timer" data-timer>3:00</span>
+      </div>
+      <p class="note">발주 버튼을 누르면 해당 상품이 <b>5개</b> 보충돼요.</p>
+      <ul id="stockList" class="item-list stock-list"></ul>
+      <div class="modal-actions">
+        <button id="btnStockClose" class="btn btn-main" type="button">닫기</button>
+      </div>
+    </section>
+
+    <!-- 빌런 손님 -->
+    <section id="modalVillain" class="modal villain-modal hidden">
+      <div class="modal-head">
+        <h2>💢 빌런 등장!</h2>
+        <span class="modal-timer" data-timer>3:00</span>
+      </div>
+      <div class="villain-talk">
+        <div id="villainPortrait" class="sprite person portrait"></div>
+        <div class="dialog">
+          <b id="villainName" class="villain-name"></b>
+          <p id="villainLine"></p>
+        </div>
+      </div>
+      <div id="villainChoices" class="choices"></div>
+      <div id="villainResult" class="villain-result hidden">
+        <p id="villainResultText"></p>
+        <div id="villainResultDelta" class="delta"></div>
+        <button id="btnVillainOk" class="btn btn-main" type="button">확인</button>
+      </div>
+    </section>
+
+    <!-- 결과 / 게임오버 / 엔딩 -->
+    <section id="modalResult" class="modal result-modal hidden">
+      <div id="resultIcon" class="result-icon"></div>
+      <h2 id="resultTitle"></h2>
+      <div id="resultBody" class="result-body"></div>
+      <div id="resultActions" class="modal-actions"></div>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
