@@ -687,6 +687,8 @@ function spawnCustomer() {
     }
     renderBubble();
     render();
+    // 일반 손님이 계산대에 오면 계산 팝업 자동으로 열기 (재고 관리 중이면 방해하지 않음)
+    if (c.type === 'normal' && !state.modal) openCalc();
   }, 950);
 }
 
