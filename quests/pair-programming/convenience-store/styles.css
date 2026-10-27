@@ -400,6 +400,8 @@ button { font-family: inherit; color: inherit; }
 }
 .keypad button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
 .keypad .k-clear { background: #ffd6d6; }
+.kbd-hint { margin: 8px 0 0; font-size: 11px; color: #7a6a8f; text-align: center; }
+@media (hover: none) { .kbd-hint { display: none; } }
 
 .stock-list .stock-count { font-weight: bold; min-width: 44px; text-align: right; }
 .stock-list li.zero .stock-count { color: var(--red); }

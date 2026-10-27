@@ -411,7 +411,7 @@ function renderButtons() {
   else if (!playing) hint = '영업 종료! 조작할 수 없어요';
   else if (!c) hint = '손님을 기다리는 중...';
   else if (c.type === 'villain') hint = '빌런 등장! 손님 응대를 눌러요';
-  else if (c.ready) hint = '계산하기를 눌러 금액을 입력해요';
+  else if (c.ready) hint = '계산하기 또는 숫자키로 금액을 입력해요';
   el.hint.textContent = hint;
 }
 
@@ -832,6 +832,64 @@ function pressKey(k) {
   el.calcMsg.textContent = '';
 }
 
+// ---------- 키보드 ----------
+// 계산 팝업: 숫자키 입력, Backspace 지우기, Delete/C 전체 지우기, Enter 계산, Esc 닫기
+// 게임 화면: Enter/Space 계산하기·손님 응대, 숫자키를 누르면 바로 계산 팝업을 열고 입력 시작
+const isDigitKey = (key) => /^\d$/.test(key);
+
+function handleKeydown(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+
+  if (state.modal === 'modalCalc') {
+    handleCalcKey(e);
+    return;
+  }
+  if (state.modal === 'modalStock') {
+    if (e.key === 'Escape') closeModal();
+    return;
+  }
+  if (state.modal || !isPlaying() || e.repeat) return;
+
+  const c = state.customer;
+  if (!c || !c.ready) return;
+  const confirmKey = e.key === 'Enter' || e.key === ' ';
+  if (c.type === 'normal' && (confirmKey || isDigitKey(e.key))) {
+    e.preventDefault();
+    openCalc();
+    if (isDigitKey(e.key) && !el.calcInputWrap.classList.contains('hidden')) pressKey(e.key);
+  } else if (c.type === 'villain' && confirmKey) {
+    e.preventDefault();
+    openVillain();
+  }
+}
+
+function handleCalcKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (!e.repeat) submitCalc();
+    return;
+  }
+  if (e.key === 'Escape') {
+    closeModal();
+    return;
+  }
+  // 입력칸에 포커스가 있으면 브라우저 기본 입력을 그대로 사용
+  if (document.activeElement === el.calcInput) return;
+
+  if (isDigitKey(e.key)) {
+    e.preventDefault();
+    pressKey(e.key);
+  } else if (e.key === 'Backspace') {
+    e.preventDefault();
+    SFX.key();
+    el.calcInput.value = el.calcInput.value.slice(0, -1);
+    el.calcMsg.textContent = '';
+  } else if (e.key === 'Delete' || e.key === 'c' || e.key === 'C') {
+    e.preventDefault();
+    pressKey('C');
+  }
+}
+
 // ---------- 재고 ----------
 function openStock() {
   if (!isPlaying()) return;
@@ -966,7 +1024,8 @@ function init() {
     const k = e.target.closest('[data-key]');
     if (k) pressKey(k.dataset.key);
   });
-  el.calcInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitCalc(); });
+  // 키패드를 눌러도 입력칸 포커스를 뺏지 않도록 (키보드 입력과 같이 쓸 수 있게)
+  el.keypad.addEventListener('mousedown', (e) => e.preventDefault());
   el.calcInput.addEventListener('input', () => { el.calcMsg.textContent = ''; });
   el.btnCalcSubmit.addEventListener('click', submitCalc);
   el.btnCalcClose.addEventListener('click', () => { SFX.click(); closeModal(); });
@@ -978,9 +1037,7 @@ function init() {
   el.btnStockClose.addEventListener('click', () => { SFX.click(); closeModal(); });
   el.btnVillainOk.addEventListener('click', () => { SFX.click(); closeVillain(); });
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && (state.modal === 'modalCalc' || state.modal === 'modalStock')) closeModal();
-  });
+  document.addEventListener('keydown', handleKeydown);
 
   render();
   openModal('modalStart');
