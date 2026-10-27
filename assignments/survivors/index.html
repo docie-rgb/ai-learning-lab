@@ -44,6 +44,19 @@
   .big:disabled { opacity: 0.5; cursor: default; }
   .dead h2 { color: #ff6a5a; }
   .win h2 { color: #ffe680; }
+
+  .evo-tree { display: grid; gap: 6px; margin: 14px 0 6px; text-align: left; }
+  .evo-row { display: grid; grid-template-columns: 1fr auto 1fr auto 1.1fr; align-items: center; gap: 6px; background: #2a1f38; border: 2px solid #3a2c4c; padding: 6px 8px; font-size: 13px; }
+  .evo-row.ready { border-color: #e8c86a; }
+  .evo-row.done { border-color: #b070e0; background: #33204a; }
+  .evo-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .evo-cell .icon { width: 24px; height: 24px; }
+  .evo-cell b { display: block; color: #fff; word-break: keep-all; }
+  .evo-cell small { display: block; color: #9a8fb0; font-size: 11px; }
+  .evo-cell.off { opacity: 0.4; }
+  .evo-row.ready .evo-res small { color: #e8c86a; }
+  .evo-row.done .evo-res b { color: #ff9cff; }
+  .evo-op { color: #9a8fb0; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -84,6 +97,8 @@
   <div class="panel">
     <h2>일시정지</h2>
     <p class="hint">Esc를 눌러 계속</p>
+    <div id="evoTree" class="evo-tree"></div>
+    <p class="hint" id="evoRule"></p>
     <p style="margin-top:16px"><button id="resumeBtn" class="big">계속하기</button></p>
   </div>
 </div>
@@ -966,7 +981,25 @@ function startGame() {
   Sound.init();
   Music.start();
 }
-function pauseGame() { state = 'paused'; show('pauseScreen', true); Sound.suspend(); }
+function pauseGame() { state = 'paused'; renderEvoTree(); show('pauseScreen', true); Sound.suspend(); }
+
+// 일시정지 화면의 진화 트리: 무기 + 짝 패시브 → 진화 무기, 현재 진행 상황 표시
+function renderEvoTree() {
+  const cell = (icon, name, sub, cls = '') =>
+    `<div class="evo-cell ${cls}"><img class="icon" src="${ICON_URL[icon]}" alt=""><div><b>${name}</b><small>${sub}</small></div></div>`;
+  $('evoTree').innerHTML = BASE_WEAPONS.map(id => {
+    const ev = WEAPONS[id].evolve, w = findWeapon(id), plv = G.up[ev.passive];
+    const done = !!w && w.id === ev.into, ready = !!w && !done && canEvolve(w);
+    const wSub = done ? '진화함' : w ? `Lv ${w.level}/${CONFIG.weaponMaxLevel}` : '미보유';
+    const pSub = plv ? `Lv ${plv}/${UP.maxLevel}` : '미보유';
+    const rSub = done ? '진화 완료' : ready ? '진화 가능! 보물상자를 여세요' : '';
+    return `<div class="evo-row ${done ? 'done' : ready ? 'ready' : ''}">`
+      + cell(id, WEAPONS[id].name, wSub, w ? '' : 'off') + '<span class="evo-op">+</span>'
+      + cell(ev.passive, UPG[ev.passive].name, pSub, plv ? '' : 'off') + '<span class="evo-op">→</span>'
+      + cell(ev.into, WEAPONS[ev.into].name, rSub, 'evo-res' + (done || ready ? '' : ' off')) + '</div>';
+  }).join('');
+  $('evoRule').textContent = `무기 Lv ${CONFIG.weaponMaxLevel} + 짝 패시브 Lv 1 이상일 때, 엘리트가 떨어뜨린 보물상자를 열면 진화합니다`;
+}
 function resumeGame() { show('pauseScreen', false); state = 'playing'; $('resumeBtn').blur(); Sound.resume(); }
 function restartGame() {
   show('gameOverScreen', false);
