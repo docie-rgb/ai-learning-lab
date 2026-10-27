@@ -32,7 +32,7 @@
 <div class="help">
   <b>← →</b> 이동 · <b>↓</b> 소프트 드롭 · <b>Space</b> 하드 드롭 · <b>↑ / X</b> 시계 회전 · <b>Z / Ctrl</b> 반시계 회전 ·
   <b>C / Shift</b> 홀드 · <b>P / Esc</b> 일시정지 · <b>M</b> 사운드 켜기/끄기<br>
-  타이틀에서 <b>← →</b> 시작 레벨 선택, <b>Enter</b> 시작 · 10초 동안 입력이 없으면 데모가 시작됩니다
+  타이틀에서 <b>↑ ↓</b> 항목 이동, <b>← →</b> 모드·레벨(스테이지)·음악 변경, <b>Enter</b> 시작 · 10초 동안 입력이 없으면 데모가 시작됩니다
 </div>
 
 <script>
@@ -42,6 +42,8 @@ const W = 256, H = 224, CELL = 8, COLS = 10, ROWS = 20;
 const FX = 88, FY = 32;               // playfield origin (logical px)
 const LOCK_MS = 500, CLEAR_MS = 360, DEMO_IDLE_MS = 10000, DEMO_LEN_MS = 45000;
 const DAS = 160, ARR = 40, SDR = 30;
+const STAGE_COUNT = 20;
+let TEST = new URLSearchParams(location.search).has('test');  // test mode (T on title toggles): K = instant stage clear
 
 const COLORS = { // base, light, dark (NES-like palette)
   I: ['#3cbcfc', '#a4e4fc', '#0058f8'],
@@ -93,42 +95,126 @@ const store = {
 };
 
 // ================= sound =================
+// Songs: melody tokens are NOTE:length in steps (eighth notes), one bass root per bar.
+// KOROBEINIKI and KALINKA (Larionov, 1860) are public-domain Russian songs arranged here;
+// the other four are original compositions.
+const SONGS = [
+  {
+    name: 'KOROBEINIKI', bpm: 150, bar: 8, style: 'oct', drum: 'khshkhsh', leads: ['p25', 'p25', 'p50'], p2: 'echo',
+    parts: [
+      ['E5:2 B4:1 C5:1 D5:2 C5:1 B4:1 A4:2 A4:1 C5:1 E5:2 D5:1 C5:1 B4:3 C5:1 D5:2 E5:2 C5:2 A4:2 A4:2 R:2 ' +
+       'R:1 D5:2 F5:1 A5:2 G5:1 F5:1 E5:3 C5:1 E5:2 D5:1 C5:1 B4:2 B4:1 C5:1 D5:2 E5:2 C5:2 A4:2 A4:2 R:2',
+       'E2 A2 G#2 A2 D2 C2 G#2 A2'],
+      ['E5:2 B4:1 C5:1 D5:2 C5:1 B4:1 A4:2 A4:1 C5:1 E5:2 D5:1 C5:1 B4:3 C5:1 D5:2 E5:2 C5:2 A4:2 A4:2 R:2 ' +
+       'R:1 D5:2 F5:1 A5:2 G5:1 F5:1 E5:3 C5:1 E5:2 D5:1 C5:1 B4:2 B4:1 C5:1 D5:2 E5:2 C5:2 A4:2 A4:2 R:2',
+       'E2 A2 G#2 A2 D2 C2 G#2 A2'],
+      ['E5:4 C5:4 D5:4 B4:4 C5:4 A4:4 G#4:4 B4:4 E5:4 C5:4 D5:4 B4:4 C5:2 E5:2 A5:4 G#5:8',
+       'A2 E2 A2 E2 A2 E2 A2 E2']
+    ]
+  },
+  {
+    // chorus "Kalinka, kalinka, kalinka moya..." then an octave-up repeat; speeds up every loop
+    name: 'KALINKA', bpm: 140, bar: 8, style: 'gallop', drum: 'khshkhsh', leads: ['p25', 'p50'], p2: 'echo', accel: true,
+    parts: [
+      ['C5:1 B4:1 A4:2 B4:1 A4:1 G4:2 A4:1 G4:1 F4:1 E4:1 E4:4 ' +
+       'E4:1 A4:1 A4:1 B4:1 C5:1 D5:1 E5:1 D5:1 C5:2 B4:1 A4:1 G#4:1 B4:1 A4:2',
+       'A2 E2 A2 E2'],
+      ['C6:1 B5:1 A5:2 B5:1 A5:1 G5:2 A5:1 G5:1 F5:1 E5:1 E5:4 ' +
+       'E5:1 A5:1 A5:1 B5:1 C6:1 D6:1 E6:1 D6:1 C6:2 B5:1 A5:1 G#5:1 B5:1 A5:2',
+       'A2 E2 A2 E2']
+    ]
+  },
+  {
+    name: 'TROIKA', bpm: 200, bar: 8, style: 'gallop', drum: 'khshkhsh', leads: ['p25', 'p125'], p2: 'echo',
+    parts: [
+      ['A4:1 D5:1 F5:1 A5:1 G5:1 F5:1 E5:1 D5:1 C#5:1 E5:1 A5:2 A4:2 R:2 ' +
+       'D5:1 F5:1 A5:1 D6:1 C6:1 A#5:1 A5:1 G5:1 F5:2 E5:1 F5:1 D5:4 ' +
+       'A#4:1 D5:1 F5:1 A#5:1 A5:1 G5:1 F5:1 D5:1 C5:1 E5:1 G5:1 C6:1 A#5:1 A5:1 G5:1 E5:1 ' +
+       'F5:1 A5:1 D6:2 C#6:1 E6:1 A5:2 D6:2 A5:1 F5:1 D5:2 R:2',
+       'D2 A2 D2 D2 A#1 C2 A2 D2'],
+      ['F5:2 A5:2 C6:2 A5:2 G5:2 A#5:2 D6:2 A#5:2 A5:1 G5:1 F5:1 E5:1 F5:2 C5:2 D5:1 E5:1 F5:1 G5:1 A5:4 ' +
+       'A#5:1 A5:1 G5:1 F5:1 G5:2 E5:2 A5:1 G5:1 F5:1 E5:1 F5:2 D5:2 E5:1 F5:1 G5:1 E5:1 C#5:2 A4:2 D5:2 F5:2 D5:4',
+       'F2 G2 F2 D2 G2 D2 A2 D2']
+    ]
+  },
+  {
+    name: 'VOLGA', bpm: 132, bar: 6, style: 'waltz', drum: 'k.h.h.', leads: ['p50'], p2: 'octave',
+    parts: [
+      ['E5:4 D5:1 C5:1 B4:2 A4:2 B4:2 C5:4 B4:1 A4:1 G#4:6 A4:2 B4:2 C5:2 D5:3 C5:1 B4:2 C5:2 B4:2 A4:2 E5:6 ' +
+       'F5:4 E5:1 D5:1 E5:4 C5:2 D5:4 C5:1 B4:1 C5:4 A4:2 B4:2 C5:2 D5:2 E5:3 D5:1 C5:2 B4:2 G#4:2 B4:2 A4:6',
+       'A2 E2 A2 E2 A2 G2 A2 E2 D2 A2 G2 A2 G2 C2 E2 A2']
+    ]
+  },
+  {
+    name: 'MATRYOSHKA', bpm: 160, bar: 8, style: 'oct', drum: 'khshkksh', leads: ['p125', 'p25'], p2: 'echo',
+    parts: [
+      ['E5:1 E5:1 B4:1 E5:1 G5:2 F#5:1 E5:1 F#5:1 F#5:1 D5:1 F#5:1 A5:2 G5:1 F#5:1 ' +
+       'G5:1 A5:1 B5:1 G5:1 E5:1 F#5:1 G5:1 E5:1 F#5:2 D#5:2 B4:4 ' +
+       'E5:1 E5:1 B4:1 E5:1 G5:2 F#5:1 E5:1 D5:1 D5:1 A4:1 D5:1 F#5:2 E5:1 D5:1 ' +
+       'C5:1 E5:1 A5:2 B4:1 D#5:1 F#5:2 E5:4 R:4',
+       'E2 D2 E2 B1 E2 D2 A1 E2'],
+      ['G5:2 G5:1 A5:1 B5:2 G5:2 A5:2 A5:1 B5:1 C6:2 A5:2 B5:1 A5:1 G5:1 F#5:1 E5:2 G5:2 F#5:1 E5:1 D5:1 C5:1 B4:4 ' +
+       'G5:2 G5:1 A5:1 B5:2 E6:2 D6:1 C6:1 B5:1 A5:1 G5:2 E5:2 C5:1 E5:1 A5:2 B4:1 D#5:1 F#5:2 E5:4 R:4',
+       'G2 A2 E2 B1 G2 G2 A1 E2']
+    ]
+  },
+  {
+    name: 'KAZACHOK', bpm: 180, bar: 8, style: 'gallop', drum: 'khshkhsh', leads: ['p25', 'p50'], p2: 'echo',
+    parts: [
+      ['A4:1 C5:1 E5:1 A5:1 G#5:1 A5:1 E5:2 F5:1 E5:1 D5:1 C5:1 B4:1 C5:1 A4:2 ' +
+       'A4:1 C5:1 E5:1 A5:1 G#5:1 A5:1 B5:2 C6:1 B5:1 A5:1 G#5:1 A5:4 ' +
+       'G5:1 F5:1 E5:1 D5:1 E5:1 F5:1 G5:2 F5:1 E5:1 D5:1 C5:1 D5:1 E5:1 F5:2 ' +
+       'E5:1 D5:1 C5:1 B4:1 C5:1 D5:1 E5:1 G#4:1 A4:2 E4:2 A4:4',
+       'A2 D2 A2 E2 C2 D2 E2 A2'],
+      ['E5:2 E5:1 F5:1 E5:2 D5:2 C5:2 C5:1 D5:1 C5:2 B4:2 A4:1 B4:1 C5:1 D5:1 E5:1 F5:1 E5:2 E5:8 ' +
+       'E5:2 E5:1 F5:1 E5:2 D5:2 C5:2 C5:1 D5:1 C5:2 B4:2 A4:1 C5:1 B4:1 G#4:1 A4:1 B4:1 G#4:2 A4:4 R:4',
+       'A2 A2 D2 E2 A2 A2 E2 A2']
+    ]
+  }
+];
+
 const Sound = (() => {
-  let ac = null, master, musicBus, sfxBus, noiseBuf, pulse25, pulse125;
+  let ac = null, master, musicBus, sfxBus, noiseBuf, noiseShort, pulse25, pulse125, triWave;
   let muted = store.get('tetris88-muted', false);
-  const music = { on: false, step: 0, next: 0, fast: false };
+  const music = { on: false, track: 0, step: 0, next: 0, fast: false, mul: 1 };
 
   const N = s => {
     const m = /^([A-G])(#?)(\d)$/.exec(s);
     return 12 * (+m[3] + 1) + { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] ? 1 : 0);
   };
   const freq = m => 440 * Math.pow(2, (m - 69) / 12);
+  const BASS = {
+    oct:    [0, 12, 0, 12, 0, 12, 0, 12],
+    gallop: [0, 12, 7, 12, 0, 12, 7, 12],
+    waltz:  [0, null, 12, null, 19, null]
+  };
+  const DRUM = { k: 'kick', s: 'snare', h: 'hat' };
 
-  // Korobeiniki (traditional Russian folk song) — lengths in eighth notes
-  const MEL_A = 'E5:2 B4:1 C5:1 D5:2 C5:1 B4:1 A4:2 A4:1 C5:1 E5:2 D5:1 C5:1 B4:3 C5:1 D5:2 E5:2 C5:2 A4:2 A4:2 R:2 ' +
-                'R:1 D5:2 F5:1 A5:2 G5:1 F5:1 E5:3 C5:1 E5:2 D5:1 C5:1 B4:2 B4:1 C5:1 D5:2 E5:2 C5:2 A4:2 A4:2 R:2';
-  const MEL_B = 'E5:4 C5:4 D5:4 B4:4 C5:4 A4:4 G#4:4 B4:4 E5:4 C5:4 D5:4 B4:4 C5:2 E5:2 A5:4 G#5:8';
-  const BASS_A = ['E2', 'A2', 'G#2', 'A2', 'D2', 'C2', 'G#2', 'A2'];
-  const BASS_B = ['A2', 'E2', 'A2', 'E2', 'A2', 'E2', 'A2', 'E2'];
-
-  const song = (() => {
+  function build(song) {
     const steps = [];
     const add = (pos, ev) => (steps[pos] || (steps[pos] = [])).push(ev);
     let pos = 0;
-    for (const sec of ['A', 'A', 'B']) {
-      const start = pos;
-      (sec === 'A' ? BASS_A : BASS_B).forEach((root, bar) => {
-        for (let i = 0; i < 8; i++) add(start + bar * 8 + i, { v: 'bass', m: N(root) + (i % 2 ? 12 : 0) });
-      });
-      for (let i = 0; i < 64; i++) add(start + i, { v: i % 4 === 0 ? 'kick' : i % 4 === 2 ? 'snare' : 'hat' });
-      for (const tok of (sec === 'A' ? MEL_A : MEL_B).split(' ')) {
+    song.parts.forEach(([mel, bass], p) => {
+      const start = pos, roots = bass.split(' '), pat = BASS[song.style];
+      const lead = song.leads[p % song.leads.length];  // duty cycle changes between sections
+      roots.forEach((root, b) => pat.forEach((o, i) => { if (o !== null) add(start + b * song.bar + i, { v: 'bass', m: N(root) + o }); }));
+      const total = roots.length * song.bar, fill = song.bar === 6 ? 3 : 4;
+      for (let i = 0; i < total; i++) {
+        // drum fill at the end of each section: snare + descending triangle toms
+        if (i >= total - fill) { const j = i - (total - fill); add(start + i, { v: 'snare' }); add(start + i, { v: 'tom', f: 300 - j * 50 }); continue; }
+        const d = song.drum[i % song.bar];
+        if (d !== '.') add(start + i, { v: DRUM[d] });
+      }
+      for (const tok of mel.trim().split(/\s+/)) {
         const [n, l] = tok.split(':');
-        if (n !== 'R') add(pos, { v: 'mel', m: N(n), len: +l });
+        if (n !== 'R') add(pos, { v: 'mel', m: N(n), len: +l, lead });
         pos += +l;
       }
-    }
-    return { steps, length: pos };
-  })();
+      if (pos !== start + total) console.warn(`${song.name}: melody ${pos - start} steps, bass ${total}`);
+    });
+    return { steps, length: pos, bpm: song.bpm, p2: song.p2, accel: !!song.accel };
+  }
+  const built = SONGS.map(build);
 
   function makePulse(duty) {
     const n = 64, re = new Float32Array(n), im = new Float32Array(n);
@@ -136,22 +222,55 @@ const Sound = (() => {
     return ac.createPeriodicWave(re, im);
   }
 
+  // NES triangle channel: 32-step, 4-bit staircase (15..0, 0..15), turned into a PeriodicWave by DFT
+  function makeNesTriangle() {
+    const N = 512, H = 48, re = new Float32Array(H), im = new Float32Array(H), s = [];
+    for (let i = 0; i < N; i++) { const step = Math.floor(i * 32 / N); s.push((step < 16 ? 15 - step : step - 16) / 7.5 - 1); }
+    for (let k = 1; k < H; k++) {
+      let a = 0, b = 0;
+      for (let i = 0; i < N; i++) { a += s[i] * Math.cos(2 * Math.PI * k * i / N); b += s[i] * Math.sin(2 * Math.PI * k * i / N); }
+      re[k] = 2 * a / N; im[k] = 2 * b / N;
+    }
+    return ac.createPeriodicWave(re, im);
+  }
+
+  // NES noise channel: 15-bit LFSR; tap 1 = long (hiss), tap 6 = short 93-step loop (metallic)
+  function makeLfsrNoise(tap, length, hold) {
+    const buf = ac.createBuffer(1, length, ac.sampleRate), d = buf.getChannelData(0);
+    let lfsr = 1, out = 1;
+    for (let i = 0; i < length; i++) {
+      if (i % hold === 0) {
+        const fb = (lfsr ^ (lfsr >> tap)) & 1;
+        lfsr = (lfsr >> 1) | (fb << 14);
+        out = lfsr & 1 ? -1 : 1;
+      }
+      d[i] = out;
+    }
+    return buf;
+  }
+
   function init() {
     if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ac = new AC();
-    master = ac.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(ac.destination);
+    // NES-ish output stage: DC-blocking high-pass + gentle low-pass
+    const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 90;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 12000;
+    master = ac.createGain(); master.gain.value = muted ? 0 : 0.5;
+    master.connect(hp).connect(lp).connect(ac.destination);
     musicBus = ac.createGain(); musicBus.gain.value = 0.5; musicBus.connect(master);
     sfxBus = ac.createGain(); sfxBus.gain.value = 0.7; sfxBus.connect(master);
-    noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    noiseBuf = makeLfsrNoise(1, ac.sampleRate, 4);
+    noiseShort = makeLfsrNoise(6, 93 * 4, 4);
     pulse25 = makePulse(0.25);
     pulse125 = makePulse(0.125);
+    triWave = makeNesTriangle();
     setInterval(schedule, 25);
   }
 
+  // o.env: NES-style volume envelope (fast attack, decay to ~65% sustain)
+  // o.vib: delayed vibrato, as used on long lead notes
   function tone(f, t, dur, o = {}) {
     const osc = ac.createOscillator(), g = ac.createGain();
     if (o.wave && typeof o.wave !== 'string') osc.setPeriodicWave(o.wave); else osc.type = o.wave || 'square';
@@ -160,15 +279,28 @@ const Sound = (() => {
     const v = o.vol == null ? 0.2 : o.vol, a = 0.004, r = Math.min(0.03, dur * 0.4);
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(v, t + a);
-    g.gain.setValueAtTime(v, Math.max(t + a, t + dur - r));
+    let sus = v, hold = t + a;
+    if (o.env) { sus = v * 0.65; hold = t + Math.max(a + 0.001, Math.min(0.15, dur * 0.6)); g.gain.linearRampToValueAtTime(sus, hold); }
+    g.gain.setValueAtTime(sus, Math.max(hold, t + dur - r));
     g.gain.linearRampToValueAtTime(0, t + dur);
+    if (o.vib && dur > 0.22) {
+      const lfo = ac.createOscillator(), depth = ac.createGain();
+      lfo.frequency.value = 6;
+      depth.gain.setValueAtTime(0, t);
+      depth.gain.setValueAtTime(0, t + 0.12);
+      depth.gain.linearRampToValueAtTime(f * 0.012, t + 0.3);
+      lfo.connect(depth).connect(osc.frequency);
+      lfo.start(t); lfo.stop(t + dur + 0.05);
+    }
     osc.connect(g).connect(o.bus || sfxBus);
     osc.start(t); osc.stop(t + dur + 0.02);
   }
 
   function noise(t, dur, o = {}) {
     const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-    src.buffer = noiseBuf;
+    src.buffer = o.short ? noiseShort : noiseBuf;
+    src.loop = true;
+    if (o.rate) src.playbackRate.value = o.rate;
     f.type = o.type || 'lowpass'; f.frequency.value = o.freq || 2000;
     g.gain.setValueAtTime(o.vol || 0.3, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
@@ -191,35 +323,60 @@ const Sound = (() => {
     gameover:t => arp(t, [523, 494, 466, 440, 415, 392, 370, 349, 330], .11, .14, { vol: .14 }),
     pause:   t => { tone(988, t, .05, { vol: .12 }); tone(1319, t + .07, .09, { vol: .12 }); },
     select:  t => tone(1200, t, .04, { wave: pulse25, vol: .12 }),
-    start:   t => arp(t, [659, 880, 1319, 1760], .06, .1, { wave: pulse25, vol: .15 })
+    start:   t => arp(t, [659, 880, 1319, 1760], .06, .1, { wave: pulse25, vol: .15 }),
+    ready:   t => { tone(784, t + .2, .1, { wave: pulse25, vol: .14 }); tone(784, t + .5, .1, { wave: pulse25, vol: .14 }); tone(1568, t + .8, .25, { wave: pulse25, vol: .14 }); },
+    stageclear: t => {
+      arp(t, [523, 659, 784, 1047, 784, 1047, 1319, 1568], .1, .14, { wave: pulse25, vol: .15 });
+      arp(t, [131, 165, 196, 262, 196, 262, 330, 392], .1, .14, { wave: 'triangle', vol: .35 });
+      tone(2093, t + .85, .5, { wave: pulse125, vol: .14 });
+    }
   };
 
-  function playEvent(ev, t, e) {
+  // Pulse 1 = lead, pulse 2 = echo (one step late, quiet) or octave-below double,
+  // triangle = bass and kick/tom sweeps, noise = snare and metallic hi-hat.
+  function playEvent(ev, t, e, song) {
+    const bus = musicBus;
     switch (ev.v) {
-      case 'mel':   tone(freq(ev.m), t, ev.len * e * 0.9, { wave: pulse25, vol: .16, bus: musicBus }); break;
-      case 'bass':  tone(freq(ev.m), t, e * 0.85, { wave: 'triangle', vol: .42, bus: musicBus }); break;
-      case 'kick':  tone(130, t, .09, { wave: 'sine', vol: .45, slide: 40, bus: musicBus }); break;
-      case 'snare': noise(t, .09, { vol: .16, freq: 1500, type: 'highpass', bus: musicBus }); break;
-      case 'hat':   noise(t, .025, { vol: .05, freq: 7000, type: 'highpass', bus: musicBus }); break;
+      case 'mel': {
+        const wave = ev.lead === 'p125' ? pulse125 : ev.lead === 'p50' ? 'square' : pulse25;
+        const dur = ev.len * e * 0.92;
+        tone(freq(ev.m), t, dur, { wave, vol: ev.lead === 'p50' ? .11 : .15, bus, env: true, vib: true });
+        if (song.p2 === 'octave') tone(freq(ev.m - 12), t, dur, { wave: pulse125, vol: .07, bus, env: true, vib: true });
+        else tone(freq(ev.m), t + e, dur * 0.9, { wave: pulse125, vol: .05, bus, env: true });
+        break;
+      }
+      case 'bass':  tone(freq(ev.m), t, e * 0.8, { wave: triWave, vol: .5, bus }); break;
+      case 'kick':  tone(220, t, .07, { wave: triWave, vol: .6, slide: 45, bus }); noise(t, .03, { vol: .12, freq: 1200, bus }); break;
+      case 'snare': noise(t, .13, { vol: .22, freq: 6000, bus }); tone(190, t, .04, { wave: triWave, vol: .3, slide: 110, bus }); break;
+      case 'hat':   noise(t, .03, { short: true, rate: 2, vol: .05, freq: 5000, type: 'highpass', bus }); break;
+      case 'tom':   tone(ev.f, t, .11, { wave: triWave, vol: .55, slide: ev.f * 0.5, bus }); noise(t, .06, { vol: .1, freq: 3000, bus }); break;
     }
   }
 
   function schedule() {
     if (!ac || !music.on) return;
-    const e = 60 / (music.fast ? 195 : 150) / 2;
+    const song = built[music.track];
     if (music.next < ac.currentTime) music.next = ac.currentTime + 0.05;
     while (music.next < ac.currentTime + 0.15) {
+      const e = 60 / (song.bpm * music.mul * (music.fast ? 1.3 : 1)) / 2;
       const evs = song.steps[music.step];
-      if (evs) for (const ev of evs) playEvent(ev, music.next, e);
+      if (evs) for (const ev of evs) playEvent(ev, music.next, e, song);
       music.next += e;
       music.step = (music.step + 1) % song.length;
+      // accelerando: each loop a little faster, then back to the start tempo
+      if (music.step === 0 && song.accel) music.mul = music.mul >= 1.6 ? 1 : music.mul * 1.1;
     }
   }
 
   return {
     init,
+    tracks: SONGS.map(s => s.name),
     sfx(name) { if (ac && !muted) SFX[name](ac.currentTime); },
-    musicStart() { music.on = true; music.step = 0; if (ac) music.next = ac.currentTime + 0.1; },
+    musicStart(track, delay = 0.1) {
+      if (track < 0) { music.on = false; return; }
+      music.on = true; music.track = track % built.length; music.step = 0; music.mul = 1;
+      if (ac) music.next = ac.currentTime + delay;
+    },
     musicStop() { music.on = false; },
     musicPause(p) { music.on = !p; if (!p && ac) music.next = ac.currentTime + 0.05; },
     setFast(f) { music.fast = f; },
@@ -252,14 +409,22 @@ resize();
 document.fonts && document.fonts.load('8px "Press Start 2P"');
 
 const fill = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+// Monospace text drawn glyph by glyph so every R can be mirrored into Я
 function text(s, x, y, color = '#fcfcfc', align = 'left') {
   ctx.font = '8px "Press Start 2P", monospace';
   ctx.textBaseline = 'top';
-  ctx.textAlign = align;
-  ctx.fillStyle = '#000';
-  ctx.fillText(s, x + 1, y + 1);
-  ctx.fillStyle = color;
-  ctx.fillText(s, x, y);
+  ctx.textAlign = 'left';
+  const w = ctx.measureText(s).width, adv = s.length ? w / s.length : 0;
+  const x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+  for (const [dx, dy, c] of [[1, 1, '#000'], [0, 0, color]]) {
+    ctx.fillStyle = c;
+    for (let i = 0; i < s.length; i++) {
+      const cx = x0 + i * adv + dx;
+      if (s[i] === 'R') {
+        ctx.save(); ctx.translate(cx + adv, y + dy); ctx.scale(-1, 1); ctx.fillText('R', 0, 0); ctx.restore();
+      } else ctx.fillText(s[i], cx, y + dy);
+    }
+  }
 }
 const pad = (n, l) => String(n).padStart(l, '0');
 
@@ -277,21 +442,24 @@ function panel(x, y, w, h) {
   fill(x + 2, y + 2, w - 4, h - 4, '#000');
 }
 
-// "TETЯIS" in small text: mirror the R
+// "TETЯIS" in small text (text() mirrors the R)
 function logoSmall(cx, y, color) {
-  const x = cx - 24;
-  text('TET', x, y, color);
-  ctx.save(); ctx.translate(x + 32, y); ctx.scale(-1, 1); text('R', 0, 0, color); ctx.restore();
-  text('IS', x + 32, y, color);
+  text('TETRIS', cx, y, color, 'center');
 }
 
-// ---------- static backdrop: dithered night sky, Kremlin skyline ----------
+// ---------- static backdrops: dithered sky (4 moods), Kremlin skyline ----------
 const WALL = 206;
-const backdrop = (() => {
+const SKIES = [
+  [[0, 0, 16], [56, 24, 88]],    // night
+  [[16, 0, 32], [136, 48, 40]],  // dusk
+  [[0, 8, 32], [24, 80, 136]],   // twilight
+  [[0, 12, 16], [16, 104, 80]]   // aurora
+];
+function buildBackdrop(top, bot) {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d');
   const img = g.createImageData(W, H);
-  const top = [0, 0, 16], bot = [56, 24, 88], levels = 6;
+  const levels = 6;
   const r = mulberry32(1988);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const f = y / (H - 1) * (levels - 1);
@@ -374,23 +542,36 @@ const backdrop = (() => {
   }
   for (let x = 0; x < W; x += 10) { px(x + 2, WALL - 6, 2, 6, '#8c2010'); px(x + 6, WALL - 6, 2, 6, '#8c2010'); px(x + 2, WALL - 3, 6, 3, '#8c2010'); }
   return c;
-})();
+}
+const backdrops = SKIES.map(([top, bot]) => buildBackdrop(top, bot));
 
 const twinkles = (() => { const r = mulberry32(42); return Array.from({ length: 14 }, () => ({ x: r() * W | 0, y: r() * 110 | 0, p: r() * 6 })); })();
-function drawBackdrop(t) {
-  ctx.drawImage(backdrop, 0, 0);
+function drawBackdrop(t, variant) {
+  ctx.drawImage(backdrops[variant % backdrops.length], 0, 0);
   for (const s of twinkles) if (Math.sin(t / 400 + s.p) > 0.6) { fill(s.x, s.y, 1, 1, '#fcfcfc'); fill(s.x - 1, s.y, 3, 1, 'rgba(252,252,252,.5)'); fill(s.x, s.y - 1, 1, 3, 'rgba(252,252,252,.5)'); }
 }
 
 // ================= game state =================
 let mode = 'title';              // title | game | over
-let demo = false, paused = false;
+let demo = false, paused = false, win = false;
+let playMode = 'marathon';       // mode of the running game: marathon | stage
 let board, piece, queue, bag, rng, holdType, holdUsed;
-let score = 0, lines = 0, level = 0, startLevel = 0, combo = -1, b2b = false;
+let score = 0, lines = 0, level = 0, combo = -1, b2b = false;
+let stage = 1, stageGoal = 0, stageLines = 0;
 let dropT = 0, lockT = 0, lastRot = false, lastKick = 0;
-let clearAnim = null, popup = null, overT = 0, flash = 0, shake = 0, dropFx = null;
+let clearAnim = null, banner = null, popup = null, overT = 0, flash = 0, shake = 0, dropFx = null;
 let clock = 0, idleT = 0, demoT = 0, aiT = 0, aiPlan = null, demoCount = 0;
-let best = store.get('tetris88-best', 0);
+
+// title menu selections (remembered)
+const prefs = store.get('tetris88-prefs', {});
+let selMode = 'stage';           // stage mode is the default every time
+let startLevel = prefs.level | 0, startStage = Math.min(STAGE_COUNT, Math.max(1, prefs.stage | 0 || 1));
+let musicSel = Number.isInteger(prefs.music) && prefs.music < SONGS.length ? prefs.music : 0;
+let titleSel = 0;
+const savePrefs = () => store.set('tetris88-prefs', { level: startLevel, stage: startStage, music: musicSel });
+
+const bestScores = store.get('tetris88-best2', { marathon: store.get('tetris88-best', 0), stage: 0 });
+const bestFor = m => bestScores[m] || 0;
 
 const play = name => { if (!demo) Sound.sfx(name); };
 
@@ -424,24 +605,77 @@ function collides(shape, px, py) {
   return false;
 }
 
+const emptyBoard = () => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+
 function newGame(isDemo) {
-  demo = isDemo; paused = false;
+  demo = isDemo; paused = false; win = false;
+  playMode = isDemo ? 'marathon' : selMode;
   rng = isDemo ? mulberry32(1988 + demoCount++) : Math.random;
-  board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+  board = emptyBoard();
   bag = []; queue = Array.from({ length: 5 }, nextFromBag);
   holdType = null; holdUsed = false;
-  score = 0; lines = 0; level = isDemo ? 5 : startLevel; combo = -1; b2b = false;
-  clearAnim = null; popup = null; flash = 0; dropFx = null;
+  score = 0; lines = 0; combo = -1; b2b = false;
+  clearAnim = null; banner = null; popup = null; flash = 0; dropFx = null; piece = null;
   demoT = 0; aiPlan = null;
   for (const k in held) delete held[k];
   mode = 'game';
+  if (playMode === 'stage') { stage = startStage; setupStage(); return; }
+  level = isDemo ? 5 : startLevel;
+  if (isDemo) Sound.musicStop(); else Sound.musicStart(musicSel);
   spawn();
-  if (!isDemo) Sound.musicStart();
 }
 
 function toTitle() {
-  mode = 'title'; demo = false; paused = false; piece = null; idleT = 0;
+  mode = 'title'; demo = false; paused = false; piece = null; banner = null; idleT = 0;
   Sound.musicStop();
+}
+
+// ---------- stage mode ----------
+// Each stage starts with a fixed garbage pattern; clear the goal number of lines to advance.
+const stageInfo = s => ({
+  level: Math.min(19, s - 1),
+  goal: Math.min(20, 6 + s),
+  garbage: Math.min(12, 1 + Math.ceil(s / 2))
+});
+const stageTrack = () => musicSel < 0 ? -1 : (musicSel + stage - startStage) % SONGS.length;
+
+function setupStage() {
+  const info = stageInfo(stage);
+  board = emptyBoard();
+  const r = mulberry32(stage * 7919 + 13), types = Object.keys(SHAPES);
+  for (let i = 0; i < info.garbage; i++) {
+    const y = ROWS - 1 - i;
+    const holes = new Set([r() * COLS | 0]);
+    if (r() < 0.3 || i >= info.garbage - 2) holes.add(r() * COLS | 0);
+    for (let x = 0; x < COLS; x++) board[y][x] = holes.has(x) ? null : types[r() * types.length | 0];
+  }
+  level = info.level; stageGoal = info.goal; stageLines = 0;
+  combo = -1; holdUsed = false; piece = null; clearAnim = null;
+  Sound.musicStart(stageTrack());
+  play('ready');
+  banner = { lines: ['STAGE ' + pad(stage, 2), 'GOAL ' + pad(stageGoal, 2), '', 'READY'], t: 0, dur: 1600, then: () => spawn() };
+}
+
+function stageClear() {
+  const empty = board.filter(r => r.every(c => !c)).length;
+  const bonus = 1000 * stage + 100 * empty * stage;
+  score += bonus;
+  saveBest();
+  piece = null;
+  play('stageclear');
+  if (musicSel >= 0) Sound.musicStart(SONGS.findIndex(s => s.name === 'KAZACHOK'), 1.1); else Sound.musicStop();
+  // Cossack dance intermission (Enter/Space skips)
+  banner = {
+    dance: true, bonus, t: 0, dur: 6000,
+    then: () => { if (stage >= STAGE_COUNT) return winGame(); stage++; setupStage(); }
+  };
+}
+
+function winGame() {
+  mode = 'over'; win = true; overT = 0; piece = null;
+  Sound.musicStop();
+  play('perfect');
+  saveBest();
 }
 
 function spawn(type) {
@@ -585,17 +819,22 @@ function lock(hard) {
 }
 
 function finishClear() {
+  const n = clearAnim.rows.length;
   board = board.filter((_, y) => !clearAnim.rows.includes(y));
   while (board.length < ROWS) board.unshift(Array(COLS).fill(null));
-  lines += clearAnim.rows.length;
+  lines += n;
   clearAnim = null;
-  const base = demo ? 5 : startLevel;
-  const nl = Math.max(base, Math.floor(lines / 10));
-  if (nl > level) {
-    level = nl;
-    play('levelup');
-    if (!popup) popup = { lines: [], t: 0 };
-    popup.lines.push('LEVEL UP'); popup.t = 0;
+  if (playMode === 'stage') {
+    stageLines += n;
+    if (stageLines >= stageGoal) return stageClear();
+  } else {
+    const nl = Math.max(demo ? 5 : startLevel, Math.floor(lines / 10));
+    if (nl > level) {
+      level = nl;
+      play('levelup');
+      if (!popup) popup = { lines: [], t: 0 };
+      popup.lines.push('LEVEL UP'); popup.t = 0;
+    }
   }
   spawn();
 }
@@ -603,14 +842,16 @@ function finishClear() {
 function topOut() {
   piece = null;
   if (demo) return toTitle();
-  mode = 'over'; overT = 0;
+  mode = 'over'; win = false; overT = 0;
   Sound.musicStop();
   Sound.sfx('gameover');
   saveBest();
 }
 
 function saveBest() {
-  if (!demo && score > best) { best = score; store.set('tetris88-best', best); }
+  if (demo || score <= bestFor(playMode)) return;
+  bestScores[playMode] = score;
+  store.set('tetris88-best2', bestScores);
 }
 
 const ghostY = () => { let y = piece.y; while (!collides(piece.shape, piece.x, y + 1)) y++; return y; };
@@ -687,6 +928,19 @@ function togglePause() {
   Sound.sfx('pause');
 }
 
+// title menu: 0 mode, 1 level/stage, 2 music
+function changeOption(d) {
+  if (titleSel === 0) selMode = selMode === 'marathon' ? 'stage' : 'marathon';
+  else if (titleSel === 1) {
+    if (selMode === 'marathon') startLevel = (startLevel + d + 20) % 20;
+    else startStage = (startStage - 1 + d + STAGE_COUNT) % STAGE_COUNT + 1;
+  } else {
+    const total = SONGS.length + 1;  // + OFF
+    musicSel = ((musicSel + 1 + d) % total + total) % total - 1;
+  }
+  savePrefs();
+}
+
 document.addEventListener('keydown', e => {
   Sound.init();
   const k = e.key;
@@ -696,8 +950,10 @@ document.addEventListener('keydown', e => {
 
   if (mode === 'title') {
     if (e.repeat) return;
-    if (k === 'ArrowLeft' || k === 'ArrowDown') { startLevel = (startLevel + 19) % 20; Sound.sfx('select'); }
-    else if (k === 'ArrowRight' || k === 'ArrowUp') { startLevel = (startLevel + 1) % 20; Sound.sfx('select'); }
+    if (k === 'ArrowUp') { titleSel = (titleSel + 2) % 3; Sound.sfx('select'); }
+    else if (k === 'ArrowDown') { titleSel = (titleSel + 1) % 3; Sound.sfx('select'); }
+    else if (k === 'ArrowLeft' || k === 'ArrowRight') { changeOption(k === 'ArrowRight' ? 1 : -1); Sound.sfx('select'); }
+    else if (k === 't' || k === 'T') { TEST = !TEST; Sound.sfx('select'); }
     else if (k === 'Enter' || k === ' ') { Sound.sfx('start'); newGame(false); }
     return;
   }
@@ -705,11 +961,13 @@ document.addEventListener('keydown', e => {
   if (mode === 'over') { if (overT > 1200 && (k === 'Enter' || k === ' ' || k === 'Escape')) toTitle(); return; }
   if (k === 'p' || k === 'P' || k === 'Escape') { togglePause(); return; }
   if (paused || e.repeat) return;
+  if (banner && banner.dance) { if ((k === 'Enter' || k === ' ') && banner.t > 800) banner.t = banner.dur; return; }
 
   if (k === 'ArrowLeft') { held.ArrowLeft = { t: 0 }; delete held.ArrowRight; }
   if (k === 'ArrowRight') { held.ArrowRight = { t: 0 }; delete held.ArrowLeft; }
   if (k === 'ArrowDown') held.ArrowDown = { t: 0 };
-  if (!piece) return;  // line-clear animation in progress
+  if (!piece) return;  // line clear or stage banner in progress
+  if (TEST && (k === 'k' || k === 'K') && playMode === 'stage') { stageClear(); return; }
 
   switch (k) {
     case 'ArrowLeft': move(-1); break;
@@ -731,6 +989,11 @@ addEventListener('blur', () => {
 function updateGame(dt) {
   if (mode === 'over') { overT += dt; return; }
   if (paused) return;
+  if (banner) {
+    banner.t += dt;
+    if (banner.t >= banner.dur) { const then = banner.then; banner = null; then(); }
+    return;
+  }
   if (clearAnim) { clearAnim.t += dt; if (clearAnim.t >= CLEAR_MS) finishClear(); return; }
   if (demo) updateDemo(dt); else handleRepeat(dt);
   if (mode !== 'game' || !piece) return;
@@ -756,18 +1019,24 @@ const GLYPHS = {
 const LOGO = [['T', 'Z'], ['E', 'L'], ['T', 'O'], ['R', 'S'], ['I', 'I'], ['S', 'T']];
 
 function drawTitle() {
-  drawBackdrop(clock);
-  const P = 5, LW = 25, GAP = 6, x0 = (W - (6 * LW + 5 * GAP)) >> 1, y0 = 18;
+  drawBackdrop(clock, 0);
+  const P = 5, LW = 25, GAP = 6, x0 = (W - (6 * LW + 5 * GAP)) >> 1, y0 = 12;
   LOGO.forEach(([ch, col], i) => {
     const bob = Math.round(Math.sin(clock / 350 + i * 0.8) * 2);
     GLYPHS[ch].forEach((row, ry) => [...row].forEach((v, rx) => {
       if (v === '1') drawBlock(x0 + i * (LW + GAP) + rx * P, y0 + ry * P + bob, COLORS[col], P);
     }));
   });
-  text(`LEVEL < ${pad(startLevel, 2)} >`, 128, 66, '#f8b800', 'center');
-  if (Math.floor(clock / 450) % 2 === 0) text('PUSH ENTER', 128, 82, '#fcfcfc', 'center');
-  text('TOP ' + pad(best, 7), 128, 98, '#a4e4fc', 'center');
+  const rows = [
+    `MODE  < ${selMode === 'stage' ? '  STAGE ' : 'MARATHON'} >`,
+    selMode === 'stage' ? `STAGE < ${pad(startStage, 2)} >` : `LEVEL < ${pad(startLevel, 2)} >`,
+    `MUSIC < ${musicSel < 0 ? 'OFF' : SONGS[musicSel].name} >`
+  ];
+  rows.forEach((s, i) => text(s, 128, 56 + i * 12, i === titleSel ? '#f8b800' : '#fcfcfc', 'center'));
+  if (Math.floor(clock / 450) % 2 === 0) text('PUSH ENTER', 128, 96, '#fcfcfc', 'center');
+  text('TOP ' + pad(bestFor(selMode), 7), 128, 108, '#a4e4fc', 'center');
   text('M:SOUND ' + (Sound.muted ? 'OFF' : 'ON '), 128, 213, '#fce0a8', 'center');
+  if (TEST) text('TEST MODE', 128, 122, '#58d854', 'center');
 }
 
 function drawFieldFrame() {
@@ -792,14 +1061,80 @@ function drawMini(type, cx, cy, s, dim) {
   cells.forEach(([x, y]) => drawBlock(bx + (x - minX) * s, by + (y - minY) * s, COLORS[dim ? 'G' : type], s));
 }
 
+// ---------- Cossack dancers (16x20 sprites, drawn at 2x) ----------
+const E16 = '................';
+const DANCER_TOP = [
+  '......hhhh......', '.....hhhhhh.....', '......ssss......', '......bssb......', '......bbbb......',
+  '.....rrwwrr.....', '....rwwwwwwr....', '....rrwwwwrr....', '.....yyyyyy.....'
+];
+const DANCER = {
+  squat: [E16, E16, E16, E16, E16, E16, ...DANCER_TOP,
+    '....pppppppp....', '...ppp....ppp...', '...pp......pp...', '..kkk......kkk..', '..kkkk....kkkk..'],
+  kick: [E16, E16, E16, E16, E16, E16, ...DANCER_TOP,
+    'kk..pppppppp....', 'kkpppppp..ppp...', '...........pp...', '..........kkk...', '..........kkkk..'],
+  jump: [
+    '......hhhh......', '.....hhhhhh.....', '......ssss......', '......bssb......', '......bbbb......',
+    'ss...rrwwrr...ss', 'wwwwwrwwwwrwwwww', '.....rrrrrr.....', '.....rrrrrr.....', '.....yyyyyy.....',
+    '....pppppppp....', '...ppp....ppp...', '..ppp......ppp..', '.ppp........ppp.', 'kkk..........kkk',
+    'kk............kk', E16, E16, E16, E16]
+};
+const DANCE_SEQ = ['squat', 'kickL', 'squat', 'kickR', 'squat', 'kickL', 'squat', 'kickR', 'jump', 'jump'];
+
+function drawSprite(rows, x, y, pal, s, flip) {
+  rows.forEach((row, ry) => {
+    for (let rx = 0; rx < row.length; rx++) {
+      const ch = row[flip ? row.length - 1 - rx : rx];
+      if (ch !== '.') fill(x + rx * s, y + ry * s, s, s, pal[ch]);
+    }
+  });
+}
+
+function drawDance() {
+  const t = banner.t;
+  drawBackdrop(clock, stage - 1);
+  // wooden stage floor + spotlight
+  for (let y = 148; y < H; y++) fill(0, y, W, 1, ((y - 148) >> 2) % 2 ? '#8c5c18' : '#a87428');
+  for (let x = 12; x < W; x += 24) fill(x, 148, 1, H - 148, '#5c3c08');
+  fill(0, 148, W, 2, '#f8d878');
+  ctx.globalAlpha = 0.2;
+  for (let i = -14; i <= 14; i++) { const w = Math.round(118 * Math.sqrt(1 - (i / 14) ** 2)); fill(128 - w, 178 + i, 2 * w, 1, '#fcfcbc'); }
+  ctx.globalAlpha = 1;
+  // curtains with folds and a scalloped valance
+  const folds = ['#d82800', '#a81000', '#780800', '#a81000'];
+  for (let x = 0; x < 36; x++) {
+    fill(x, 0, 1, H, folds[(x >> 2) % 4]);
+    fill(W - 1 - x, 0, 1, H, folds[(x >> 2) % 4]);
+  }
+  fill(0, 0, W, 12, '#a81000');
+  for (let x = 0; x < W; x += 16) for (let i = 0; i < 6; i++) fill(x + i, 12 + (i >> 1), 16 - 2 * i, 1, '#a81000');
+  for (let x = 0; x < W; x += 4) fill(x + 1, 15, 2, 2, '#f8b800');
+
+  const beat = Math.floor(t / 170);
+  [['#d82800', 72], ['#0078f8', 128], ['#00a800', 184]].forEach(([shirt, cx], i) => {
+    const f = t < 700 ? 'squat' : DANCE_SEQ[beat % DANCE_SEQ.length];
+    const rows = f === 'jump' ? DANCER.jump : f === 'squat' ? DANCER.squat : DANCER.kick;
+    // outer dancers kick outward, middle one alternates
+    const flip = f === 'kickR' ? i !== 0 : f === 'kickL' ? i === 2 : false;
+    const pal = { h: '#383838', s: '#fcbcb0', b: '#201008', r: shirt, w: '#fcfcfc', y: '#f8b800', p: '#0000bc', k: '#201008' };
+    const y = 190 - 40 + (f === 'jump' ? -10 - (beat % 2) * 4 : 0);
+    drawSprite(rows, cx - 16, y, pal, 2, flip);
+    if (f === 'jump' && i === 1) text('HEY!', cx, y - 10, '#f8b800', 'center');
+  });
+
+  panel(52, 26, 152, 46);
+  text('STAGE ' + pad(stage, 2) + ' CLEAR!', 128, 34, '#f8b800', 'center');
+  text('BONUS ' + pad(banner.bonus, 6), 128, 48, '#fcfcfc', 'center');
+  if (t > 800 && Math.floor(clock / 450) % 2 === 0) text('ENTER', 128, 60, '#a4e4fc', 'center');
+}
+
 function drawGame() {
-  drawBackdrop(clock);
+  if (banner && banner.dance && !paused) { drawDance(); return; }
+  drawBackdrop(clock, playMode === 'stage' ? stage - 1 : Math.floor(level / 5));
   ctx.save();
   if (shake > 0) ctx.translate(0, Math.round(shake / 60));
   drawFieldFrame();
 
-  const hideBoard = paused;
-  if (!hideBoard) {
+  if (!paused) {
     // locked blocks (with center-out wipe on clearing rows)
     const step = clearAnim ? Math.min(5, Math.floor(clearAnim.t / CLEAR_MS * 6)) : 0;
     board.forEach((row, y) => row.forEach((t, x) => {
@@ -835,9 +1170,22 @@ function drawGame() {
         if (v && piece.y + y >= 0) drawBlock(FX + (piece.x + x) * CELL, FY + (piece.y + y) * CELL, c);
       }));
     }
+
+    if (banner) {
+      const n = banner.lines.length;
+      panel(FX + 2, FY + 48, 76, 14 + n * 10);
+      banner.lines.forEach((s, i) => text(s, FX + 40, FY + 55 + i * 10, i === 1 ? '#f8b800' : '#fcfcfc', 'center'));
+    }
   }
 
-  if (mode === 'over') {
+  if (mode === 'over' && win) {
+    panel(FX + 2, FY + 44, 76, 72);
+    text('ALL', FX + 40, FY + 52, '#f8b800', 'center');
+    text('STAGES', FX + 40, FY + 62, '#f8b800', 'center');
+    text('CLEAR!', FX + 40, FY + 72, '#f8b800', 'center');
+    text(pad(score, 7), FX + 40, FY + 88, '#fcfcfc', 'center');
+    if (overT > 1200 && Math.floor(clock / 450) % 2 === 0) text('ENTER', FX + 40, FY + 102, '#a4e4fc', 'center');
+  } else if (mode === 'over') {
     const rows = Math.min(ROWS, Math.floor(overT / 45));
     for (let y = 0; y < rows; y++) for (let x = 0; x < COLS; x++) drawBlock(FX + x * CELL, FY + y * CELL, COLORS.G);
     if (overT > 1000) {
@@ -867,10 +1215,17 @@ function drawGame() {
   panel(4, 72, 72, 84);
   text('SCORE', 12, 78, '#a4e4fc');
   text(pad(score, 7), 12, 89);
-  text('LINES', 12, 104, '#a4e4fc');
-  text(pad(lines, 3), 12, 115);
-  text('LEVEL', 12, 130, '#a4e4fc');
-  text(pad(level, 2), 12, 141);
+  if (playMode === 'stage') {
+    text('LEFT', 12, 104, '#a4e4fc');
+    text(pad(Math.max(0, stageGoal - stageLines), 2), 12, 115);
+    text('STAGE', 12, 130, '#a4e4fc');
+    text(pad(stage, 2) + '/' + STAGE_COUNT, 12, 141);
+  } else {
+    text('LINES', 12, 104, '#a4e4fc');
+    text(pad(lines, 3), 12, 115);
+    text('LEVEL', 12, 130, '#a4e4fc');
+    text(pad(level, 2), 12, 141);
+  }
   if (popup) {
     const n = Math.min(popup.lines.length, 5);
     panel(4, 160, 72, 10 + n * 10);
@@ -890,7 +1245,7 @@ function drawGame() {
   }
   panel(180, 120, 72, 36);
   text('TOP', 188, 126, '#a4e4fc');
-  text(pad(Math.max(best, demo ? 0 : score), 7), 188, 138);
+  text(pad(demo ? bestFor('marathon') : Math.max(bestFor(playMode), score), 7), 188, 138);
   if (b2b && !demo) text('B2B', 216, 164, '#f8b800', 'center');
 }
 
@@ -908,7 +1263,7 @@ function frame(now) {
   if (flash > 0) flash = Math.max(0, flash - dt / 220);
   if (shake > 0) shake = Math.max(0, shake - dt);
   if (dropFx) { dropFx.t += dt; if (dropFx.t > 160) dropFx = null; }
-  Sound.setFast(mode === 'game' && !demo && danger());
+  Sound.setFast(mode === 'game' && !demo && !banner && danger());
 
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.imageSmoothingEnabled = false;
