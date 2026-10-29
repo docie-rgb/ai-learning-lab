@@ -4,6 +4,8 @@
 
 **배포:** https://todo-app-3pg4.onrender.com (Render Free + Supabase)
 
+**시연 영상 (3분):** [docs/demo.mp4](docs/demo.mp4) - 로컬 SQLite → Supabase + RLS → Render 배포 순서
+
 - [PRD.md](PRD.md) - 만들 기능과 조건
 - [docs/DB_DESIGN.md](docs/DB_DESIGN.md) - DB 구조도
 - [NOTES.md](NOTES.md) - 확인 기록과 스크린샷
