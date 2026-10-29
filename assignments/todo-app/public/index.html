@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>내 할 일</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div>
+        <h1>내 할 일</h1>
+        <p class="sub" id="today-label"></p>
+      </div>
+      <div id="account" class="account" hidden>
+        <span id="user-email"></span>
+        <button type="button" id="logout" class="link">로그아웃</button>
+      </div>
+    </header>
+
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <section id="login-view" hidden>
+      <form id="login-form" class="login-form">
+        <h2>로그인</h2>
+        <label>이메일 <input id="email" type="email" autocomplete="email" required></label>
+        <label>비밀번호 <input id="password" type="password" autocomplete="current-password" minlength="6" maxlength="72" required></label>
+        <div class="login-actions">
+          <button type="submit" data-mode="login">로그인</button>
+          <button type="submit" data-mode="signup" class="secondary">회원가입</button>
+        </div>
+        <p id="login-message" class="message" hidden></p>
+      </form>
+    </section>
+
+    <section id="todo-view" hidden>
+    <form id="add-form" class="add-form" autocomplete="off">
+      <input id="title" type="text" placeholder="할 일을 입력하세요" maxlength="200" required aria-label="할 일 제목">
+      <input id="due" type="date" aria-label="마감일 (선택)">
+      <button type="submit">추가</button>
+    </form>
+
+    <div class="toolbar">
+      <div class="filters" role="tablist" aria-label="보기">
+        <button type="button" class="filter active" data-filter="all" role="tab" aria-selected="true">전체</button>
+        <button type="button" class="filter" data-filter="today" role="tab" aria-selected="false">오늘</button>
+      </div>
+      <span id="count" class="count"></span>
+    </div>
+
+    <ul id="list" class="list"></ul>
+    <p id="empty" class="empty" hidden>할 일이 없습니다.</p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+node_modules/
+
+# 비밀값과 로컬 DB는 GitHub에 올리지 않는다
+.env
+todo.db
+todo.db-*

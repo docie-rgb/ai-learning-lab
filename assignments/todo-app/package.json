@@ -1,0 +1,21 @@
+{
+  "name": "todo-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "새로고침해도 남는 Todo 앱 (Express + SQLite / Supabase)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --watch --env-file-if-exists=.env server.js",
+    "rls-check": "node --env-file-if-exists=.env scripts/rls-check.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0"
+  }
+}
