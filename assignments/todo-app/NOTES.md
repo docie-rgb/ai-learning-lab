@@ -70,5 +70,40 @@
 
 백엔드를 건너뛰고 Supabase에 직접 요청해도 막힌다는 것은, 백엔드 코드에 실수가 있더라도 DB(RLS)가 마지막으로 지켜 준다는 뜻이다.
 
-## 배포 - Render
-(진행 예정)
+## 배포 - Render (2026-10-29)
+
+**접속 URL:** https://todo-app-3pg4.onrender.com
+(Free 요금제라 15분간 접속이 없으면 서버가 잠들고, 다음 첫 접속에 30초~1분 걸릴 수 있음)
+
+**배포 준비물**
+
+| 준비물 | 이 앱에서 쓴 값 |
+|---|---|
+| 코드 보관 위치 | GitHub `zslayer-dev/ai-learning-lab`, 브랜치 `main` |
+| Root Directory | `assignments/todo-app` (저장소 안의 하위 폴더) |
+| 런타임 | Node (`package.json`의 `engines`: 22.13 이상) |
+| 빌드 명령 | `npm ci` |
+| 시작 명령 | `npm start` |
+| 환경변수 | `DB_PROVIDER=supabase`, `SUPABASE_URL`, `SUPABASE_KEY`(publishable) - Render 대시보드에만 입력, 코드·Git에는 없음 |
+| 넣지 않은 것 | `PORT`(Render가 지정), secret / service_role 키, 테스트 계정 정보 |
+| 요금제 / 지역 | Free / Singapore (Supabase 서울과 가장 가까운 곳) |
+| 코드에서 준비한 것 | `app.set('trust proxy', 1)` - Render 프록시 뒤에서 https를 인식해 로그인 쿠키를 `Secure`로 보냄 |
+
+| 확인 항목 | 결과 | 증빙 |
+|---|---|---|
+| 배포 URL 접속 → 로그인 화면, 로그인 전 API는 401 | 통과 | [C1-배포-로그인화면](docs/screenshots/C1-배포-로그인화면.png) |
+| 계정 A로 로그인 → 계정 B의 할 일 3개가 보이지 않음 | 통과 | [C2-배포-계정A-B의할일안보임](docs/screenshots/C2-배포-계정A-B의할일안보임.png) |
+| 배포 서버에서 할 일 추가 → 새로고침 후에도 남음 | 통과 | [C3-배포-추가후-새로고침유지](docs/screenshots/C3-배포-추가후-새로고침유지.png) |
+| 배포 서버 대상 RLS 확인 (`BASE_URL` 지정 후 `npm run rls-check`) | 11건 모두 통과 | [rls-check-result-render.txt](docs/rls-check-result-render.txt) |
+
+**로컬 vs 클라우드 정리:** DB 저장 위치를 Supabase로 바꾼 것(길 B)과 앱을 인터넷에 공개한 것(Render 배포)은 별개의 일이다. 로컬 서버와 Render 서버가 같은 Supabase를 쓰기 때문에, 어느 쪽에서 로그인해도 같은 할 일이 보인다.
+
+## 회고
+
+- **새로고침해도 남아야 할 데이터와 역할 분담:** 할 일의 제목·완료 여부·마감일과 그 주인. 백엔드는 요청을 받아 입력을 검사하고 누구의 요청인지 확인하며, DB는 그 결과를 남기고 조건에 맞는 것을 찾아 준다.
+- **DB가 발전한 이유 하나:** 파일에 따로따로 적으면 같은 정보가 여러 곳에 흩어지고 서로 어긋난다. 관계형 DB는 표와 키로 정보를 한 곳에만 두고 관계로 이어서 이 문제를 풀었다.
+- **내 표·항목·관계:** `todos` 표 하나(id, user_id, title, done, due_date, created_at). 사용자 1명이 할 일 여러 개를 갖는 1:N 관계다. '오늘 할 일'은 `SELECT * FROM todos WHERE due_date = '2026-10-29'`이고, 길 B에서는 RLS가 `AND user_id = 나`를 자동으로 붙여 준다.
+- **자기 할 일만 보게 하려면:** 서버가 로그인 토큰이 진짜인지 Supabase에 확인하고, DB는 RLS로 `auth.uid() = user_id`인 행만 허용한다. 백엔드와 DB가 두 겹으로 지킨다.
+- **SQL 주입·비밀번호 유출 방지, 복구:** 파라미터화 쿼리, 비밀번호는 직접 저장하지 않고 Supabase Auth에 맡김(해시 저장), 키는 `.env`와 Render 환경변수에만 둠. Supabase Free는 자동 백업이 없어서, 중요한 데이터라면 직접 백업(덤프)하고 복구까지 해 봐야 한다.
+- **고른 DB의 무료 한도와 백업:** Supabase Free는 DB 500MB, 1주 미사용 시 일시정지, 자동 백업 없음. Render Free는 15분 미사용 시 잠듦.
+- **로컬과 Supabase에서 새로고침 후 남았나:** 둘 다 남았다. 로컬은 서버 재시작 후에도 `todo.db`에 그대로 있었고(A3), Supabase는 서버 재시작과 Render 배포 서버 양쪽에서 그대로였다(B3, C3).
