@@ -90,7 +90,6 @@ PRD의 기능이 모두 구현되었고, 완료 기준마다 증빙이 1:1로 �
 - [express-rate-limit](https://github.com/express-rate-limit/express-rate-limit): 로그인·회원가입 요청 횟수 제한
 - [Helmet](https://helmetjs.github.io/): Express 보안 헤더 일괄 적용
 - [OWASP CSRF Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html): SameSite 쿠키와 추가 방어(Origin 검사)
-- [GitHub – 커밋 이메일 주소 설정](https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-personal-account-on-github/managing-email-preferences/setting-your-commit-email-address): noreply 이메일로 개인 이메일 비공개
 
 ## 2.리뷰를 통해 개선을 제안할 부분이 있다면 내용과 간략한 설명을 첨부합니다.
 
@@ -108,4 +107,4 @@ PRD의 기능이 모두 구현되었고, 완료 기준마다 증빙이 1:1로 �
 
 요구사항(PRD) → 구현 → 검증 → 배포의 흐름이 매우 깔끔한 결과물이다. 특히 보안 면에서 **"백엔드를 믿지 않고 DB(RLS)를 최종 방어선으로 둔다"** 는 설계를 정확히 구현했고, 이를 백엔드 경유와 DB 직접 요청 두 경로, 로컬과 배포 서버 두 환경에서 검증해 증명한 점이 가장 인상적이었다. 비밀값 관리(하드코딩 0건, publishable 키만 사용), httpOnly 쿠키, 입력값 검증, 파라미터화 쿼리 등 기본기도 빠짐없이 갖췄다.
 
-다만 공개 저장소의 스크린샷과 커밋 정보에 **개인 이메일이 노출**되어 있어 가장 먼저 정리할 것을 권한다. 또한 로그아웃 시 세션 미종료와 로그인 요청 제한 부재는 배포 서비스로서 보완할 부분이다. ART 3 의 디버깅 기록은 "통과" 결과 위주라, 에이전트가 만든 코드에서 무엇이 잘못되었고 어떻게 고쳤는지를 남기면 학습 기록으로서의 가치가 더 커질 것이다.
+다만 로그아웃 시 세션 미종료와 로그인 요청 제한 부재는 배포 서비스로서 보완할 부분이다. ART 3 의 디버깅 기록은 "통과" 결과 위주라, 에이전트가 만든 코드에서 무엇이 잘못되었고 어떻게 고쳤는지를 남기면 학습 기록으로서의 가치가 더 커질 것이다.
