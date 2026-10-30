@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Todo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="app-title">Project Todo</h1>
+    <div id="current" class="current" hidden>
+      <span class="current-label">현재 프로젝트</span>
+      <strong id="current-name">미분류</strong>
+    </div>
+    <!-- supabase 모드에서 로그인한 경우에만 표시 -->
+    <div id="user-box" class="user-box" hidden>
+      <span id="user-email" class="user-email"></span>
+      <button id="logout-button" type="button">로그아웃</button>
+    </div>
+  </header>
+
+  <!-- supabase 모드에서 로그인하지 않은 경우 표시. 회원가입은 없음(계정은 Supabase 대시보드에서 생성) -->
+  <section id="login-view" class="login-view" hidden>
+    <form id="login-form" class="login-form">
+      <h2>로그인</h2>
+      <label>
+        이메일
+        <input id="login-email" type="email" autocomplete="username" required>
+      </label>
+      <label>
+        비밀번호
+        <input id="login-password" type="password" autocomplete="current-password" required>
+      </label>
+      <button id="login-button" type="submit">로그인</button>
+      <p id="login-message" class="login-message" role="status"></p>
+    </form>
+  </section>
+
+  <div id="app-view" class="layout" hidden>
+    <aside class="sidebar" aria-label="프로젝트 목록">
+      <h2 class="side-heading">프로젝트</h2>
+      <ul id="project-list" class="project-list"></ul>
+
+      <form id="project-form" class="project-form" autocomplete="off">
+        <input id="project-name" type="text" maxlength="100" placeholder="새 프로젝트 이름" aria-label="새 프로젝트 이름">
+        <button type="submit">추가</button>
+      </form>
+    </aside>
+
+    <main class="main">
+      <form id="todo-form" class="todo-form" autocomplete="off">
+        <input id="todo-title" type="text" maxlength="200" placeholder="할 일을 입력하세요" aria-label="할 일 제목" required>
+        <input id="todo-due" type="date" aria-label="마감일 (선택)">
+        <select id="todo-project" aria-label="소속 프로젝트"></select>
+        <button type="submit">등록</button>
+      </form>
+
+      <div class="list-toolbar">
+        <span id="list-summary" class="list-summary"></span>
+        <label class="sort">
+          정렬
+          <select id="sort-select">
+            <option value="created">등록순</option>
+            <option value="due">마감일순</option>
+          </select>
+        </label>
+      </div>
+
+      <ul id="todo-list" class="todo-list"></ul>
+      <p id="empty" class="empty" hidden>할 일이 없습니다. 위에서 새 할 일을 등록하세요.</p>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="alert" hidden></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
