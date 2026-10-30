@@ -1,6 +1,6 @@
 # AIFFEL Campus Agent Code Review Templete
-- 개발자 : 개발자의 이름을 작성하세요.
-- 리뷰어 : 리뷰어의 이름을 작성하세요.
+- 개발자 : 변경진
+- 리뷰어 : 최승현
 
 > 리뷰 대상: [`assignments/todo-app`](https://github.com/docie-rgb/ai-learning-lab/tree/main/assignments/todo-app) (원본 `zslayer-dev/ai-learning-lab` 포크)
 > 구성: JavaScript(Node.js + Express 5) 백엔드 + HTML/CSS/JS 화면, 저장소 SQLite(길 A) ↔ Supabase(길 B), Render 배포
@@ -58,7 +58,6 @@ PRD의 기능이 모두 구현되었고, 완료 기준마다 증빙이 1:1로 �
 
 | 위험도 | 내용 | 영향 | 위치 |
 |---|---|---|---|
-| **높음 (개인정보)** | 공개 저장소의 스크린샷(B2·B3·C2) 상단에 **개인 Gmail 주소에 별칭(+)을 붙인 테스트 계정 주소**가 그대로 보인다. 시연 영상에도 포함되었을 가능성이 높다. 또 저장소 초기 커밋 8개의 작성자 이메일이 개인 Gmail 이다 (todo-app 커밋 3개는 noreply) | 공개 저장소이므로 누구나 개인 이메일을 수집할 수 있다. 이미지를 교체해도 과거 커밋에 남는다 | `docs/screenshots/`, `docs/demo.mp4`, Git 커밋 메타데이터 |
 | 중간 | 로그아웃이 쿠키만 지우고 **Supabase 세션은 종료하지 않는다** | refresh 토큰이 유출되면 로그아웃 후에도 최대 30일간 새 토큰을 발급받을 수 있다 | `auth.js` 110~113행 |
 | 중간 | 로그인·회원가입에 **요청 횟수 제한이 없다**. 배포 앱이 공개 회원가입을 허용한다 | 비밀번호 대입 시도, 가입 스팸. 모든 요청이 Render 서버 IP 하나로 Supabase 에 가므로, 한 사람이 Supabase 의 IP 기준 제한을 소진하면 **다른 사용자 전원의 로그인이 막힐 수 있다** | `auth.js` `/signup`, `/login` |
 | 낮음 | refresh 토큰 쿠키의 `path` 가 `/` 라서 정적 파일 요청에도 함께 전송된다 | 노출 범위가 필요 이상으로 넓다 | `auth.js` `cookieOptions()` |
@@ -95,18 +94,14 @@ PRD의 기능이 모두 구현되었고, 완료 기준마다 증빙이 1:1로 �
 
 ## 2.리뷰를 통해 개선을 제안할 부분이 있다면 내용과 간략한 설명을 첨부합니다.
 
-1. **개인 이메일 노출 정리 (우선)**
-   - 테스트 계정은 개인 메일 별칭 대신 `todo-a@example.com` 같은 가짜 주소로 다시 만들고, 스크린샷·영상을 교체한다.
-   - GitHub 설정에서 "Keep my email addresses private" 를 켜고 `git config user.email` 을 noreply 주소로 바꾼다.
-   - 이미 공개된 이미지는 과거 커밋에 남으므로, 완전히 지우려면 이력 정리(`git filter-repo` 등)가 필요하다는 점을 알고 판단한다.
-2. **로그아웃 시 Supabase 세션 종료**: 쿠키 삭제 전에 사용자의 토큰으로 Supabase 로그아웃(세션 종료) API 를 호출해 refresh 토큰을 무효화한다.
-3. **로그인·회원가입 요청 제한**: `express-rate-limit` 으로 `/api/auth/login`, `/api/auth/signup` 에 IP 당 횟수 제한을 건다. 과제용 배포라면 Supabase 대시보드에서 공개 회원가입을 끄는 것도 방법이다.
-4. **쿠키 범위 축소**: refresh 쿠키의 `path` 를 `/api/auth` 로 좁히고, 갱신은 해당 경로에서만 처리한다.
-5. **보안 헤더**: `helmet()` 적용, `app.disable('x-powered-by')`.
-6. **디버깅 기록 추가**: NOTES 에 "문제 해결 기록" 섹션을 만들어 `증상 → 원인 → 해결 → 확인` 형식으로 남긴다 (예: 배포에서 로그인 쿠키가 Secure 로 설정되지 않아 `trust proxy` 를 추가한 과정). 기능 단위로 나누어 커밋하면 수정 이력이 자연스럽게 남는다.
-7. **Supabase 재시작 증빙 교체**: B3 를 실제 재시작 후 화면으로 다시 캡처한다(B2 와 동일 파일).
-8. **중복 등록 방지**: 요청 중에는 등록 버튼을 `disabled` 로 바꾼다.
-9. (선택) **자동 테스트**: 현재 RLS 확인 스크립트는 훌륭하지만, 입력값 검증 API 를 `node --test` 로 자동화하면 수정 후 회귀를 바로 잡을 수 있다.
+1. **로그아웃 시 Supabase 세션 종료**: 쿠키 삭제 전에 사용자의 토큰으로 Supabase 로그아웃(세션 종료) API 를 호출해 refresh 토큰을 무효화한다.
+2. **로그인·회원가입 요청 제한**: `express-rate-limit` 으로 `/api/auth/login`, `/api/auth/signup` 에 IP 당 횟수 제한을 건다. 과제용 배포라면 Supabase 대시보드에서 공개 회원가입을 끄는 것도 방법이다.
+3. **쿠키 범위 축소**: refresh 쿠키의 `path` 를 `/api/auth` 로 좁히고, 갱신은 해당 경로에서만 처리한다.
+4. **보안 헤더**: `helmet()` 적용, `app.disable('x-powered-by')`.
+5. **디버깅 기록 추가**: NOTES 에 "문제 해결 기록" 섹션을 만들어 `증상 → 원인 → 해결 → 확인` 형식으로 남긴다 (예: 배포에서 로그인 쿠키가 Secure 로 설정되지 않아 `trust proxy` 를 추가한 과정). 기능 단위로 나누어 커밋하면 수정 이력이 자연스럽게 남는다.
+6. **Supabase 재시작 증빙 교체**: B3 를 실제 재시작 후 화면으로 다시 캡처한다(B2 와 동일 파일).
+7. **중복 등록 방지**: 요청 중에는 등록 버튼을 `disabled` 로 바꾼다.
+8. (선택) **자동 테스트**: 현재 RLS 확인 스크립트는 훌륭하지만, 입력값 검증 API 를 `node --test` 로 자동화하면 수정 후 회귀를 바로 잡을 수 있다.
 
 
 # 총평
